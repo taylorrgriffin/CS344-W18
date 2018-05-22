@@ -1,0 +1,573 @@
+#!/bin/bash
+# Author: Taylor Griffin
+
+exec_dims() {
+	# Push file with symbols to tempfile
+  cat -A $2 > "tempfile"
+	# Setup loop
+	numRows=0
+	numElements=0
+	# Loop through file
+	while read -n1 c; do
+		# End of a row
+		[ "$c" == "$" ] && numRows=$[$numRows+1] && numElements=$[$numElements+1]
+		# Tab found between columns
+		[ "$c" == "^" ] && numElements=$[$numElements+1]
+  # Terminate loop
+	done < $"tempfile"
+	# Make caculation for Columns
+	numCols=$(($numElements / $numRows))
+	# Print result
+	echo "$numRows $numCols"
+  # Return
+	return 0
+}
+
+exec_transpose() {
+	# Push file with symbols to tempfile if defined
+  [ $# -eq 2 ] && cat -A $2 > "tempfile"
+  # If not defined push stdin with symbols to tempfile
+  [ $# -lt 2 ] && cat -A /dev/stdin > "tempfile"
+	# Setup loop
+	numRows=0
+	numElements=0
+	# Loop through file
+	while read -n1 c; do
+		# End of a row
+		[ "$c" == "$" ] && numRows=$[$numRows+1] && numElements=$[$numElements+1]
+		# Tab found between columns
+		[ "$c" == "^" ] && numElements=$[$numElements+1]
+	done < $"tempfile"
+	# Make caculation for Columns
+	numCols=$(($numElements / $numRows))
+	# Store all values in a temp string
+	tempString=""
+  [ $# -eq 2 ] && cat -A $2 > "tempfile"
+  # Create a string of values seperated by periods
+	while read -n1 c; do
+    # Add values to string
+		[ ! "$c" == "$" ] && [ ! "$c" == "^" ] && [ ! "$c" == "I" ] && tempString+="$c"
+    # Add break to string if newline is found
+    [ "$c" == "$" ] && tempString+="."
+    # Add break to string if tab is found
+    [ "$c" == "^" ] && tempString+="."
+	done < $"tempfile"
+  # Store items in string into an array
+  num=0
+  idx=0
+  dig=-1
+  chk=""
+  lastNum=0
+  array=()
+  # Iterate through all values
+  while test $num -lt $numElements; do
+    # Check for the value seperating character
+    while [ ! "$chk" == "." ]; do
+      # Check next character
+      chk=${tempString:idx:1}
+      idx=$[$idx+1]
+      dig=$[$dig+1]
+    done
+    # Set marker to determined value
+    lastNum=$[$idx-$dig-1]
+    # Add value to array
+    array[$num]=${tempString:lastNum:dig}
+    # Increment counter
+    num=$[$num+1]
+    # Reset digit and check
+    dig=-1
+    chk=""
+  done
+	# Set up loop
+	place=0
+	iterRows=0
+	iterCols=0
+	mode=0
+	depth=0
+	target=$[$numRows-2]
+	# Run Loop for all values
+	while test $iterCols -lt $numCols; do
+		while test $iterRows -lt $numRows; do
+      # Print value in array
+      var=${array[$place]}
+			echo -n $var
+			check=$(($numRows-$iterRows))
+      # Print tab or newline char
+			[ $check -gt 1 ] && echo -n -e '\t'
+			[ $check -eq 1 ] && echo -n -e '\n'
+      # Toggle jump forward/back
+			if [ $mode = 0 ]; then
+						[ $depth -eq $target ] && mode=1
+						place=$[$place+$numCols]
+						depth=$[$depth+1]
+          else
+						mode=0
+						move=$[$numCols*$depth]
+						place=$[$place-$move+1]
+						depth=0
+      fi
+      # Increment counter
+			iterRows=$[$iterRows+1]
+		done
+    # Increment counter, reset rows
+		iterCols=$[$iterCols+1]
+		iterRows=0
+	done
+  # Return
+	return 0
+}
+
+check_dims() {
+	# Break if num arguments is greater than 2
+	[ $# -gt 2 ] && (>&2 echo "Wrong number of arguments.") && return 1
+	# Check stdin if num arguments is less than 2
+	[ $# -lt 2 ] && exec_dims $@ && return 0
+	# Execute dims if file exists and is readable
+	[ $# -eq 2 ] && [ -a $2 ] && [ -r $2 ] && exec_dims $@ && return 0
+	# Check if file doesn't exist or is un-readable
+	[ $# -eq 2 ] && [ ! -r $2 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+}
+
+check_transpose() {
+	# Break if num arguments is greater than 2
+	[ $# -gt 2 ] && (>&2 echo "Wrong number of arguments.") && return 1
+	# Check stdin if num arguments is less than 2
+	[ $# -lt 2 ] && exec_transpose $@ && return 0
+	# Execute transpose if file exists and is readable
+	[ $# -eq 2 ] && [ -a $2 ] && [ -r $2 ] && exec_transpose $@ && return 0
+	# Check if file doesn't exist or is un-readable
+	[ $# -eq 2 ] && [ ! -r $2 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+}
+
+exec_add() {
+  # Push file 1 with symbols to tempfile
+	cat -A $2 > "tempfile"
+	# Setup loop
+	numRows1=0
+	numElements=0
+  # initilize strings
+  matrix1=""
+  matrix2=""
+  # Create a string of values seperated by periods
+	while read -n1 c; do
+    # Add values to string
+		[ ! "$c" == "$" ] && [ ! "$c" == "^" ] && [ ! "$c" == "I" ] && matrix1+="$c"
+    # Add break to string if newline is found
+    [ "$c" == "$" ] && matrix1+="." && numRows1=$[$numRows1+1] && numElements=$[$numElements+1]
+    # Add break to string if tab is found
+    [ "$c" == "^" ] && matrix1+="." && numElements=$[$numElements+1]
+	done < $"tempfile"
+  # Make caculation for Columns
+	numCols1=$(($numElements / $numRows1))
+  # Push file 2 with symbols to tempfile
+	cat -A $3 > "tempfile"
+	# Setup loop
+	numRows2=0
+	numElements=0
+  # Create a string of values seperated by periods
+	while read -n1 c; do
+    # Add values to string
+		[ ! "$c" == "$" ] && [ ! "$c" == "^" ] && [ ! "$c" == "I" ] && matrix2+="$c"
+    # Add break to string if newline is found
+    [ "$c" == "$" ] && matrix2+="." && numRows2=$[$numRows2+1] && numElements=$[$numElements+1]
+    # Add break to string if tab is found
+    [ "$c" == "^" ] && matrix2+="." && numElements=$[$numElements+1]
+	done < $"tempfile"
+  # Make caculation for Columns
+	numCols2=$(($numElements / $numRows2))
+  # Print error if matricies aren't the same size
+	[ ! "$numRows1" == "$numRows2" ] &&  (>&2 echo "Matricies are of incorrect size.") && return 1
+	[ ! "$numCols1" == "$numCols2" ] &&  (>&2 echo "Matricies are of incorrect size.") && return 1
+  # Store items in matrix1 (str) into m1 (array)
+  num=0
+  idx=0
+  dig=-1
+  chk=""
+  lastNum=0
+  m1=()
+  # Iterate through all values
+  while test $num -lt $numElements; do
+    # Check for the value seperating character
+    while [ ! "$chk" == "." ]; do
+      # Check next character
+      chk=${matrix1:idx:1}
+      idx=$[$idx+1]
+      dig=$[$dig+1]
+    done
+    # Set marker to determined value
+    lastNum=$[$idx-$dig-1]
+    # Add value to array
+    m1[$num]=${matrix1:lastNum:dig}
+    # Increment counter
+    num=$[$num+1]
+    # Reset digit and check
+    dig=-1
+    chk=""
+  done
+  # Store items in matrix2 (str) into m2 (array)
+  num=0
+  idx=0
+  dig=-1
+  chk=""
+  lastNum=0
+  m2=()
+  # Iterate through all values
+  while test $num -lt $numElements; do
+    # Check for the value seperating character
+    while [ ! "$chk" == "." ]; do
+      # Check next character
+      chk=${matrix2:idx:1}
+      idx=$[$idx+1]
+      dig=$[$dig+1]
+    done
+    # Set marker to determined value
+    lastNum=$[$idx-$dig-1]
+    # Add value to array
+    m2[$num]=${matrix2:lastNum:dig}
+    # Increment counter
+    num=$[$num+1]
+    # Reset digit and check
+    dig=-1
+    chk=""
+  done
+  # Set up loop
+  width=$numCols1
+  height=$numRows1
+  end=$(($numCols1*$numRows1))
+  sum=0
+  place=0
+  horizplace=0
+  check=0
+  # Execute loop
+  while test $place -lt $end; do
+    ret=$((${m1[$place]}+${m2[$place]}))
+    echo -n "$ret"
+    check=$(($width-$horizplace))
+    horizplace=$[$horizplace+1]
+    place=$[$place+1]
+    sum=0
+    [ $check -gt 1 ] && echo -n -e '\t'
+    [ $check -eq 1 ] && echo -n -e '\n' && horizplace=0
+  done
+  # Return
+  return 0
+}
+check_add() {
+  # Print error if the number of arguments isn't 3
+	[ $# -ne 3 ] && (>&2 echo "Wrong number of arguments.") && return 1
+  # Print error if matrix 1 isn't readable
+	[ ! -r $2 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+  # Print error if matrix 2 isn't readable
+	[ ! -r $3 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+  # If there are three arguments and both matricies are readable, execute add
+  [ $# -eq 3 ] && [ -r $2 ] && [ -r $3 ] && exec_add $@ && return 0
+}
+
+exec_multiply() {
+  # Push file 1 with symbols to tempfile
+	cat -A $2 > "tempfile"
+	# Setup loop
+	numRows1=0
+	numElements=0
+  # initilize strings
+  matrix1=""
+  matrix2=""
+  # Create a string of values seperated by periods
+	while read -n1 c; do
+    # Add values to string
+		[ ! "$c" == "$" ] && [ ! "$c" == "^" ] && [ ! "$c" == "I" ] && matrix1+="$c"
+    # Add break to string if newline is found
+    [ "$c" == "$" ] && matrix1+="." && numRows1=$[$numRows1+1] && numElements=$[$numElements+1]
+    # Add break to string if tab is found
+    [ "$c" == "^" ] && matrix1+="." && numElements=$[$numElements+1]
+	done < $"tempfile"
+  # Make caculation for Columns
+	numCols1=$(($numElements / $numRows1))
+  # Push file 2 with symbols to tempfile
+	cat -A $3 > "tempfile"
+	# Setup loop
+	numRows2=0
+	numElements=0
+  # Create a string of values seperated by periods
+	while read -n1 c; do
+    # Add values to string
+		[ ! "$c" == "$" ] && [ ! "$c" == "^" ] && [ ! "$c" == "I" ] && matrix2+="$c"
+    # Add break to string if newline is found
+    [ "$c" == "$" ] && matrix2+="." && numRows2=$[$numRows2+1] && numElements=$[$numElements+1]
+    # Add break to string if tab is found
+    [ "$c" == "^" ] && matrix2+="." && numElements=$[$numElements+1]
+	done < $"tempfile"
+  # Make caculation for Columns
+	numCols2=$(($numElements / $numRows2))
+  # Print error if matricies aren't a compatible size
+	[ ! "$numRows1" == "$numCols2" ] &&  (>&2 echo "Matricies are of incorrect size.") && return 1
+	# [ "$numCols1" != "$numRows2" ] &&  (>&2 echo "Matricies are of incorrect size.") && return 1
+
+
+  # if [ $numCols1 -ne $numRows2 ]
+  # then
+  #   echo " Numcols1: $numCols1, Numrows1: $numRows1, Numcols2: $numCols2 Numrows2: $numRows2, Matricies are of incorrect size." >&2
+  #   return 1
+  # fi
+  # Store items in matrix1 (str) into m1 (array)
+  num=0
+  idx=0
+  dig=-1
+  chk=""
+  lastNum=0
+  m1=()
+  # Iterate through all values
+  while test $num -lt $numElements; do
+    # Check for the value seperating character
+    while [ ! "$chk" == "." ]; do
+      # Check next character
+      chk=${matrix1:idx:1}
+      idx=$[$idx+1]
+      dig=$[$dig+1]
+    done
+    # Set marker to determined value
+    lastNum=$[$idx-$dig-1]
+    # Add value to array
+    m1[$num]=${matrix1:lastNum:dig}
+    # Increment counter
+    num=$[$num+1]
+    # Reset digit and check
+    dig=-1
+    chk=""
+  done
+  # Store items in matrix2 (str) into m2 (array)
+  num=0
+  idx=0
+  dig=-1
+  chk=""
+  lastNum=0
+  m2=()
+  # Iterate through all values
+  while test $num -lt $numElements; do
+    # Check for the value seperating character
+    while [ ! "$chk" == "." ]; do
+      # Check next character
+      chk=${matrix2:idx:1}
+      idx=$[$idx+1]
+      dig=$[$dig+1]
+    done
+    # Set marker to determined value
+    lastNum=$[$idx-$dig-1]
+    # Add value to array
+    m2[$num]=${matrix2:lastNum:dig}
+    # Increment counter
+    num=$[$num+1]
+    # Reset digit and check
+    dig=-1
+    chk=""
+  done
+  # Set up Loop
+  x=0
+  y=0
+  z=0
+  sum=0
+  idx1=0
+  idx2=0
+  ct=0
+  result=()
+  # Multiply matricies and store them in result (array)
+  while test $z -lt $numRows1; do
+    while test $y -lt $numCols2; do
+      while test $x -lt $numCols1; do
+        # Do operation and add to sum
+        idx1=$(( $x+$numCols1*$z ))
+        # echo "idx1: $idx1"
+        idx2=$(( $x*$numCols2+$y ))
+        # echo "idx2: $idx2"
+        val=$((${m1[$idx1]}*${m2[$idx2]}))
+        sum=$(( $sum+$val ))
+        x=$(( $x+1 ))
+      done
+      # Store sum in array
+      result[$ct]=$[$sum]
+      # Inc counter
+      ct=$[$ct+1]
+      # Reset sum
+      sum=0
+      # Increment counter
+      y=$[$y+1]
+      # Reset Counter
+      x=0
+    done
+    # Increment counter
+    z=$[$z+1]
+    # Reset Counter
+    y=0
+  done
+
+  # Print result as a matrix
+  width=$numRows1
+  height=$numCols2
+  # Set up loop
+  end=$(($numCols1*$numRows1))
+  place=0
+  horizplace=0
+  check=0
+  #Execute loop
+  while test $place -lt $end; do
+    # Set val
+    var=${result[$place]}
+    # Print val
+    echo -n "$var"
+    # Calc check
+    check=$(($width-$horizplace))
+    # Inc horizplace
+    horizplace=$[$horizplace+1]
+    # Inc place
+    place=$[$place+1]
+    # If check greater than one, print tab
+    [ $check -gt 1 ] && echo -n -e '\t'
+    # Else print newline
+    [ $check -eq 1 ] && echo -n -e '\n' && horizplace=0
+  done
+
+}
+
+check_multiply() {
+  # Print error if the number of arguments isn't 3
+	[ $# -ne 3 ] && (>&2 echo "Wrong number of arguments.") && return 1
+  # Print error if matrix 1 isn't readable
+	[ ! -r $2 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+  # Print error if matrix 2 isn't readable
+	[ ! -r $3 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+  # If there are three arguments and both matricies are readable, execute multiply
+  [ $# -eq 3 ] && [ -r $2 ] && [ -r $3 ] && exec_multiply $@ && return 0
+}
+
+exec_mean() {
+  # Push file with symbols to tempfile if defined
+  [ $# -eq 2 ] && cat -A $2 > "tempfile"
+  # If not defined push stdin with symbols to tempfile
+  [ $# -lt 2 ] && cat -A /dev/stdin > "tempfile"
+	# Setup loop
+	numRows=0
+	numElements=0
+	# Loop through file
+	while read -n1 c; do
+		# End of a row
+		[ "$c" == "$" ] && numRows=$[$numRows+1] && numElements=$[$numElements+1]
+		# Tab found between columns
+		[ "$c" == "^" ] && numElements=$[$numElements+1]
+	done < $"tempfile"
+	# Make caculation for Columns
+	numCols=$(($numElements / $numRows))
+	# Store all values in a temp string
+	tempString=""
+  [ $# -eq 2 ] && cat -A $2 > "tempfile"
+  # Create a string of values seperated by periods
+	while read -n1 c; do
+    # Add values to string
+		[ ! "$c" == "$" ] && [ ! "$c" == "^" ] && [ ! "$c" == "I" ] && tempString+="$c"
+    # Add break to string if newline is found
+    [ "$c" == "$" ] && tempString+="."
+    # Add break to string if tab is found
+    [ "$c" == "^" ] && tempString+="."
+	done < $"tempfile"
+  # Store items in string into an array
+  num=0
+  idx=0
+  dig=-1
+  chk=""
+  lastNum=0
+  array=()
+  # Iterate through all values
+  while test $num -lt $numElements; do
+    # Check for the value seperating character
+    while [ ! "$chk" == "." ]; do
+      # Check next character
+      chk=${tempString:idx:1}
+      idx=$[$idx+1]
+      dig=$[$dig+1]
+    done
+    # Set marker to determined value
+    lastNum=$[$idx-$dig-1]
+    # Add value to array
+    array[$num]=${tempString:lastNum:dig}
+    # Increment counter
+    num=$[$num+1]
+    # Reset digit and check
+    dig=-1
+    chk=""
+  done
+  # Set up loop
+  result=()
+  x=0
+  y=0
+  z=0
+  check=0
+  place=0
+  sum=0
+  num=0
+  avg=0
+  idx=0
+  # Execute loop
+  while test $x -lt $numCols; do
+    while test $y -lt $numRows; do
+      # Calc index
+      idx=$(($x+$y*$numCols))
+      #Add num to sum
+      sum=$(($sum+${array[$idx]}))
+      # Inc y
+      y=$[$y+1]
+    done
+    # Calculate average with proper rounding
+    let avg="($sum + ($numRows/2)*( ($sum>0)*2-1 )) / $numRows"
+    # Send avg to array
+    result[$num]=$avg
+    # Inc num
+    num=$[$num+1]
+    #Reset sum
+    sum=0
+    # Reset y
+    y=0
+    # Inc x
+    x=$[$x+1]
+  done
+  # Loop through array to print vals as matrix
+  while test $z -lt $num; do
+    # Calc check
+    check=$(($num-$z))
+    # Print value
+    echo -n "${result[$z]}"
+    # Print tab if there is a value left
+    [ $check -gt 1 ] && echo -n -e "\t"
+    # If there is no value left print a newline char
+    [ $check -eq 1 ] && echo -n -e "\n"
+    # Inc z
+    z=$[$z+1]
+  done
+  # Return
+  return 0
+}
+
+check_mean() {
+  # Print error if the number of arguments is more than 2
+	[ $# -gt 2 ] && (>&2 echo "Wrong number of arguments.") && return 1
+  # Print error if matrix isn't readable
+	[ ! -r $2 ] && (>&2 echo "File is invalid or does not exist.") && return 1
+  # If there are three arguments and both matricies are readable, execute multiply
+  [ $# -lt 3 ] && [ -r $2 ] && exec_mean $@ && return 0
+}
+
+[ $# -eq 0 ] && (>&2 echo "Please input a command") && exit
+
+case "$1" in
+   dims) check_dims $@
+      ;;
+   transpose) check_transpose $@
+      ;;
+   mean) check_mean $@
+      ;;
+   add) check_add $@
+      ;;
+   multiply) check_multiply $@
+      ;;
+	 *) $@
+	  	;;
+   esac
+                  
